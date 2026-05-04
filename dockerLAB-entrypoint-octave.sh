@@ -38,25 +38,25 @@ if [ "$1" == 'model' ]; then
     chmod +r /models/images/$modelID.jpg
     chmod +r /models/images/$modelID.svg
     
-    ./mc cp --recursive /models/$modelID/ minio/models/$modelID/
-    ./mc cp /models/images/$modelID.jpg minio/models/$modelID/$modelID.jpg
-    ./mc cp /models/images/$modelID.svg minio/models/$modelID/$modelID.svg
+    #./mc cp --recursive /models/$modelID/ minio/models/$modelID/
+    #./mc cp /models/images/$modelID.jpg minio/models/$modelID/$modelID.jpg
+    #./mc cp /models/images/$modelID.svg minio/models/$modelID/$modelID.svg
 
 
 elif [ "$1" == "prediction" ]; then
 	echo "[Entrypoint] Starting prediction process"
 	
 	#retrieve models from bucket
-	./mc cp minio/models/$modelID/bestmodel.mat /models/$modelID/bestmodel.mat
-	./mc cp minio/models/$modelID/config.mat /models/$modelID/config.mat
-	./mc cp minio/models/$modelID/estimation_$TIMESTAMP.csv /models/$modelID/estimation_$TIMESTAMP.csv
+	#./mc cp minio/models/$modelID/bestmodel.mat /models/$modelID/bestmodel.mat
+	#./mc cp minio/models/$modelID/config.mat /models/$modelID/config.mat
+	#./mc cp minio/models/$modelID/estimation_$TIMESTAMP.csv /models/$modelID/estimation_$TIMESTAMP.csv
 	
 
     octave predlauncher.m $modelID $TIMESTAMP $NUMINPUTS
     #need to have a convention on where to store/return the output: /models/modelID/estimation_timestamp.csv
-    echo "Estimation created, finishing..."
-    echo "Uploading prediction to bucket..."
-    ./mc cp /models/$modelID/out_$TIMESTAMP.csv minio/models/$modelID/predictions/out_$TIMESTAMP.csv
+    #echo "Estimation created, finishing..."
+    #echo "Uploading prediction to bucket..."
+    #./mc cp /models/$modelID/out_$TIMESTAMP.csv minio/models/$modelID/predictions/out_$TIMESTAMP.csv
     
 fi
 

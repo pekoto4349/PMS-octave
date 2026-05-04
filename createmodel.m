@@ -155,7 +155,7 @@ eval(savecommand)
     % Modify some parameters
 
     %POPULATION SIZE IN SOME CASES (=2) CAUSES OCTAVE BUGS ..RHS etc.)
-    options = gaoptimset('Generations' ,6,'PopulationSize',20);%3 replaced by max_tfs
+    options = gaoptimset('Generations' ,30,'PopulationSize',30);%3 replaced by max_tfs
     %NORMALIZATION GIA TA YPOLOIPA DIASTHMATA
 
 

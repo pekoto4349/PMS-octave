@@ -51,10 +51,10 @@ RUN apt-get install wget
 USER joe
 #install minio client
 
-RUN wget https://dl.min.io/client/mc/release/linux-amd64/mc
-RUN chmod +x mc
-RUN ./mc alias set minio http://10.100.59.182:9000 newacc minio@hua2021
-RUN pwd
+#RUN wget https://dl.min.io/client/mc/release/linux-amd64/mc
+#RUN chmod +x mc
+#RUN ./mc alias set minio http://10.100.59.182:9000 newacc minio@hua2021
+#RUN pwd
 
 RUN curl http://bigdatastack-tasks.ds.unipi.gr/gkousiou/adw/-/raw/master/adwdocker/modelling/dockerLAB-entrypoint-octave.sh > /home/joe/dockerLAB-entrypoint-octave.sh
 RUN chmod +x /home/joe/dockerLAB-entrypoint-octave.sh
