@@ -238,6 +238,9 @@ eval(savecommand)
       j=1;
       sample_index=1;
       %extract percentage of error with regards to the real value
+
+      mape_floor = 1.0; %add a floor to prevent division-by-zero explosions
+
       for j=1:max_nets
           sample_index=1;
           % fuzout: estimated from fis output
@@ -247,6 +250,7 @@ eval(savecommand)
           %CVRMSE(j) = RMSE./mean(valy);
 
          for sample_index=1:max_samples       %CHANGE NA GINEI MAX SAMPLES
+           denominator = max(abs(valy(sample_index)), mape_floor); %use max to enforce the floor
            y2(sample_index,j)=y1(sample_index,j)/abs(valy(sample_index));  %changed to abs
            sample_index=sample_index+1;
          end
@@ -262,13 +266,54 @@ eval(savecommand)
       y2rev=y2';
 
       %mean error from combining all produced models for each validation case
-      mean_error_from_combination_of_all_models_for_each_validation=mean(y2rev);
+      %mean_error_from_combination_of_all_models_for_each_validation=mean(y2rev);
+      median_error_from_combination=median(y2rev);
 
       %min_RMSE=min(RMSE)
       %min_CVRMSE=min(CVRMSE)
 
-      final=mean_error_from_combination_of_all_models_for_each_validation';
+      %final=mean_error_from_combination_of_all_models_for_each_validation';
+      final=median_error_from_combination';
       overall_mean_error=mean(abs(final));
+
+            % ==========================================================
+      % PMS INTERNAL VALIDATION ERROR LOGGING
+      % Logs:
+      % 1) all bad MAPE cases above 200%
+      % 2) summary internal PMS metrics for Python script
+      % ==========================================================
+
+      num_x = str2num(numInputs);
+
+      bad = find(abs(final) * 100 > 200);
+
+      X_denorm = zeros(length(final), num_x);
+
+      for col = 1:num_x
+          X_denorm(:, col) = ((sample(col,:)' + 1) / 2) * ...
+              (ps.xmax(col) - ps.xmin(col)) + ps.xmin(col);
+      end
+
+      % Columns for NSM -> T:
+      % case_index, N, S, M, actual_Y, predicted_Y, signed_percent_error
+      if ~isempty(bad)
+          csvwrite([workDir '/bad_mape_cases.csv'], ...
+              [bad, X_denorm(bad,:), valy(bad), mean(y(bad,:),2), final(bad)*100]);
+      end
+
+      % Internal PMS graph/model-validation summary
+      pms_internal_mape = mean(abs(final)) * 100;
+      pms_internal_max_abs_error = max(abs(final)) * 100;
+      pms_internal_bad_200_count = length(bad);
+      pms_internal_validation_cases = length(final);
+
+      % Columns:
+      % internal_mape, max_abs_error, bad_200_count, validation_cases
+      csvwrite([workDir '/pms_internal_metrics.csv'], ...
+          [pms_internal_mape, pms_internal_max_abs_error, ...
+          pms_internal_bad_200_count, pms_internal_validation_cases]);
+
+
 
       %to y2rev einai h vash gia na melethsoume ta windows klp...alla an
       %pairnoume windows pairnoume ta idia montela ka8e fora?h apla ta 10 mesaia
@@ -387,7 +432,10 @@ eval(savecommand)
        
        y1fin(1:max_final_samples,1)=yfin(1:max_final_samples,1)-valyfin;
        
+       mape_floor = 1.0;
+
        for final_sample_index=1:max_final_samples 
+          denominator = max(abs(valyfin(final_sample_index)), mape_floor);
           y2fin(final_sample_index,1)=y1fin(final_sample_index,1)/abs(valyfin(final_sample_index));  %changed to abs
           final_sample_index=final_sample_index+1;
        end
@@ -423,6 +471,7 @@ eval(savecommand)
       ylabel("% Error per final validation case");
       score=mean(abs(y2fin))*100;
       scorestring=['Final validation MAPE:',num2str(score),'%'];
+      csvwrite([workDir '/pms_internal_metrics.csv'], score);
       legend(scorestring,"location", "northwest");
       disp("Keeping best model...")
       printcommand=['print -djpg /models/images/',modelID,'.jpg'];
