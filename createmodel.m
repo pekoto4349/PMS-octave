@@ -29,7 +29,22 @@ eval(loadcommand)
 %transform to normalize. OUTPUT SHOULD BE TRAINVER2 variable with rows: input number, columns: data lines
 
 inputData=inputData';
-[trainver1,ps]=normalize(inputData,-1,1,0);
+
+%"same jobs" mode (pms_kfold.py with PMS_OCTAVE_SAME_JOBS=1): inputfile.csv holds
+%the train, medval and val rows in that order, and split_sizes.csv holds their
+%counts. The min/max for [-1,1] then come from the train rows only.
+sameJobsFile=[workDir '/split_sizes.csv'];
+sameJobs=(exist(sameJobsFile,'file')==2);
+if sameJobs
+  splitSizes=csvread(sameJobsFile);
+  nTr=splitSizes(1);
+  nMed=splitSizes(2);
+  nVal=splitSizes(3);
+  [trainOnly,ps]=normalize(inputData(:,1:nTr),-1,1,0);
+  [trainver1,ps]=normalize(inputData,-1,1,ps);
+else
+  [trainver1,ps]=normalize(inputData,-1,1,0);
+end
 
 save config.mat numInputs modelID ps;
 savecommand=['save ',workDir,'/config.mat numInputs modelID numOutputs ps'];
@@ -46,6 +61,14 @@ eval(savecommand)
       end
   end
 
+if sameJobs
+  train=trainver1(:,1:nTr);
+  medval=trainver1(:,nTr+1:nTr+nMed);
+  val=trainver1(:,nTr+nMed+1:nTr+nMed+nVal);
+  %no extra 20% is set aside in this mode, so the "Final validation MAPE"
+  %below is the chosen net scored on val
+  finalval=val;
+else
 [trainver2,finalval]=subset(trainver1,1,1,0.2);
 
 
@@ -55,6 +78,7 @@ eval(savecommand)
       
  
   [train,medval,val]=subset(trainver2,1,1,0.2,0.3)
+end
   
   sizetrain2=size(train);
   sizemedval2=size(medval);
@@ -436,12 +460,79 @@ eval(savecommand)
 
        for final_sample_index=1:max_final_samples 
           denominator = max(abs(valyfin(final_sample_index)), mape_floor);
-          y2fin(final_sample_index,1)=y1fin(final_sample_index,1)/abs(valyfin(final_sample_index));  %changed to abs
+          y2fin(final_sample_index,1)=y1fin(final_sample_index,1)/denominator;
           final_sample_index=final_sample_index+1;
        end
-         
-       
-      
+
+      % ==========================================================
+      % Final validation (bottom-right plot) edge cases — same
+      % threshold style as bad_mape_cases (>200% on |signed graph %|).
+      % Columns:
+      %   1 inputfile_row     — 1-based line in workDir/inputfile.csv (or -1)
+      %   2 finalval_case_idx — x-axis index on bottom-right subplot
+      %   3..(2+numInputs)    — denormalized inputs (N,S,M,...)
+      %   3+numInputs         — actual y (T)
+      %   4+numInputs         — predicted y
+      %   5+numInputs         — signed % error as on graph (y2fin*100)
+      %   6+numInputs         — abs(signed %) = pointwise |MAPE|-style %
+      % ==========================================================
+      final_mape_threshold_pct = 200;
+      bad_fin = find(abs(y2fin(:)) * 100 > final_mape_threshold_pct);
+      if ~isempty(bad_fin)
+        nbf = length(bad_fin);
+        num_xf = str2num(numInputs);
+        Xf = zeros(nbf, num_xf);
+        for rr = 1:nbf
+          ii = bad_fin(rr);
+          for col = 1:num_xf
+            Xf(rr, col) = ((finalsample(col, ii) + 1) / 2) * ...
+                (ps.xmax(col) - ps.xmin(col)) + ps.xmin(col);
+          end
+        end
+        ya = valyfin(bad_fin);
+        yp = yfin(bad_fin);
+        if size(ya, 2) > 1, ya = ya(:); end
+        if size(yp, 2) > 1, yp = yp(:); end
+        signed_g = y2fin(bad_fin) * 100;
+        abs_mape = abs(signed_g);
+        in_row = -ones(nbf, 1);
+        raw_train = csvread([workDir '/inputfile.csv']);
+        if size(raw_train, 2) >= num_xf + 1
+          for rr = 1:nbf
+            for line = 1:size(raw_train, 1)
+              ok = 1;
+              for col = 1:num_xf
+                if abs(raw_train(line, col) - Xf(rr, col)) > 1e-3 * max(1, abs(Xf(rr, col)))
+                  ok = 0;
+                  break;
+                end
+              end
+              if ok && abs(raw_train(line, num_xf + 1) - ya(rr)) > 1e-3 * max(1, abs(ya(rr)))
+                ok = 0;
+              end
+              if ok
+                in_row(rr) = line;
+                break;
+              end
+            end
+          end
+        end
+        bad_fin_mat = [in_row(:), bad_fin(:), Xf, ya(:), yp(:), signed_g(:), abs_mape(:)];
+        csvwrite([workDir '/bad_mape_cases_finalval.csv'], bad_fin_mat);
+      end
+
+      % Export finalval rows with denormalized inputs so Python can compute
+      % SMAPE / MAE / RMSE and do per-regime analysis on the held-out set.
+      % Columns: X1..Xn (denormalized inputs)  |  actual_T  |  predicted_T
+      % finalsample is (num_inputs x max_final_samples) — denormalize each input col.
+      Xfin_export = zeros(max_final_samples, num_inputs);
+      for fv_col = 1:num_inputs
+        Xfin_export(:, fv_col) = ((finalsample(fv_col, 1:max_final_samples) + 1) / 2 ...
+            .* (ps.xmax(fv_col) - ps.xmin(fv_col)) + ps.xmin(fv_col))';
+      end
+      csvwrite([workDir '/finalval_actuals_predictions.csv'], ...
+               [Xfin_export, valyfin(:), yfin(:)]);
+
        %this is not needed here, since we only have the best net
 %       for denormInd=1:max_nets
 %          %y includes outputs from all saved networks, its a (maxnets x validation size) array
